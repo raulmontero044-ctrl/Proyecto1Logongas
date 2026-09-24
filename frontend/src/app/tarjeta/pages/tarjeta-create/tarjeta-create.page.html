@@ -1,0 +1,19 @@
+@if (confirmacion) {
+  <div class="alert alert-success mt-3" data-testid="confirmacion" role="alert">
+    {{ confirmacion }}
+  </div>
+}
+
+@if (errorMensaje) {
+  <div class="alert alert-danger mt-3" data-testid="error-validacion" role="alert">
+    <strong>{{ errorCodigo }}</strong>
+    <span>{{ errorMensaje }}</span>
+  </div>
+}
+
+<app-tarjeta-form
+  [tipos]="tipos"
+  [enviando]="enviando"
+  (submitRequest)="onSubmitRequest($event)"
+  (cancelar)="onCancelar()"
+></app-tarjeta-form>
