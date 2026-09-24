@@ -2,6 +2,7 @@ package com.mibanco.tarjeta.service;
 
 import com.mibanco.tarjeta.dto.TarjetaRequest;
 import com.mibanco.tarjeta.dto.TarjetaResponse;
+import com.mibanco.tarjeta.dto.TipoTarjetaResponse;
 import com.mibanco.tarjeta.entity.Tarjeta;
 import com.mibanco.tarjeta.entity.TipoTarjeta;
 import com.mibanco.tarjeta.exception.NombrePropietarioRequeridoException;
@@ -12,6 +13,8 @@ import com.mibanco.tarjeta.repository.TipoTarjetaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class TarjetaService {
@@ -59,5 +62,11 @@ public class TarjetaService {
     private TarjetaResponse toResponse(Tarjeta tarjeta) {
         String tipo = tarjeta.getTipo() != null ? tarjeta.getTipo().getNombre() : null;
         return new TarjetaResponse(tarjeta.getId(), tarjeta.getNombrePropietario(), tipo);
+    }
+
+    public List<TipoTarjetaResponse> listarTiposTarjeta() {
+        return tipoTarjetaRepository.findAll().stream()
+                .map(tipo -> new TipoTarjetaResponse(tipo.getId(), tipo.getNombre()))
+                .toList();
     }
 }
