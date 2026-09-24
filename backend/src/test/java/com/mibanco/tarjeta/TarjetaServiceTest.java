@@ -23,6 +23,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -47,7 +49,7 @@ class TarjetaServiceTest {
     }
 
     @Test
-    void crearTarjetaConNombreYTipoValidosLaPersisteConIdUnicoAsignado() {
+    void caso1CrearTarjetaConNombreYTipoValidosLaPersisteConIdAsignado() {
         TipoTarjeta debito = new TipoTarjeta("Débito");
         when(tipoTarjetaRepository.findByNombreIgnoreCase("Débito")).thenReturn(Optional.of(debito));
         when(tarjetaRepository.save(any(Tarjeta.class))).thenAnswer(invocation -> {
@@ -68,16 +70,17 @@ class TarjetaServiceTest {
     }
 
     @Test
-    void crearTarjetaConNombreDelPropietarioVacioEsRechazada() {
-        assertThatThrownBy(() -> tarjetaService.crearTarjeta(new TarjetaRequest("   ", "Débito")))
-                .isInstanceOf(NombrePropietarioRequeridoException.class)
-                .hasMessage("El nombre del propietario es obligatorio");
+    void caso2CrearTarjetaConNombreVacioEsRechazadaConCodigoNOMBRE_REQUERIDO() {
+        NombrePropietarioRequeridoException ex = assertThrows(NombrePropietarioRequeridoException.class,
+                () -> tarjetaService.crearTarjeta(new TarjetaRequest("   ", "Débito")));
 
+        assertEquals("El nombre del propietario es obligatorio", ex.getMessage());
+        assertEquals("NOMBRE_REQUERIDO", ex.getCodigo());
         verify(tarjetaRepository, never()).save(any());
     }
 
     @Test
-    void crearTarjetaResuelveElTipoIgnorandoMayusculasYMinusculas() {
+    void caso3CrearTarjetaCoincideConElTipoDelCatalogoIgnorandoMayusculasYMinusculas() {
         TipoTarjeta debito = new TipoTarjeta("Débito");
         when(tipoTarjetaRepository.findByNombreIgnoreCase("débito")).thenReturn(Optional.of(debito));
         when(tipoTarjetaRepository.findByNombreIgnoreCase("DÉBITO")).thenReturn(Optional.of(debito));
@@ -100,18 +103,19 @@ class TarjetaServiceTest {
     }
 
     @Test
-    void crearTarjetaConTipoInexistenteEsRechazada() {
+    void caso4CrearTarjetaConTipoInexistenteEsRechazadaConCodigoTIPO_NO_EXISTE() {
         when(tipoTarjetaRepository.findByNombreIgnoreCase("Bienvenida")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> tarjetaService.crearTarjeta(new TarjetaRequest("Ana Pérez", "Bienvenida")))
-                .isInstanceOf(TipoTarjetaNoEncontradoException.class)
-                .hasMessage("El tipo de tarjeta no existe");
+        TipoTarjetaNoEncontradoException ex = assertThrows(TipoTarjetaNoEncontradoException.class,
+                () -> tarjetaService.crearTarjeta(new TarjetaRequest("Ana Pérez", "Bienvenida")));
 
+        assertEquals("El tipo de tarjeta no existe", ex.getMessage());
+        assertEquals("TIPO_NO_EXISTE", ex.getCodigo());
         verify(tarjetaRepository, never()).save(any());
     }
 
     @Test
-    void crearTarjetaSinTipoEsPermitida() {
+    void caso5CrearTarjetaSinTipoEsPermitida() {
         when(tarjetaRepository.save(any(Tarjeta.class))).thenAnswer(invocation -> {
             Tarjeta guardada = invocation.getArgument(0);
             ReflectionTestUtils.setField(guardada, "id", 12L);
@@ -130,7 +134,7 @@ class TarjetaServiceTest {
     }
 
     @Test
-    void crearTarjetaPropagaLaViolacionDeIntegridadPorIdentificadorDuplicado() {
+    void caso6CrearTarjetaConIdentificadorDuplicadoEsRechazadaPorConstraintDeClavePrimaria() {
         when(tarjetaRepository.save(any(Tarjeta.class)))
                 .thenThrow(new DataIntegrityViolationException("Duplicate entry for primary key"));
 
@@ -153,11 +157,13 @@ class TarjetaServiceTest {
     }
 
     @Test
-    void obtenerTarjetaInexistenteComunicaQueNoExiste() {
+    void obtenerTarjetaInexistenteComunicaQueNoExisteConCodigoTARJETA_NO_ENCONTRADA() {
         when(tarjetaRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> tarjetaService.obtenerTarjeta(99L))
-                .isInstanceOf(TarjetaNoEncontradaException.class)
-                .hasMessage("Tarjeta no encontrada");
+        TarjetaNoEncontradaException ex = assertThrows(TarjetaNoEncontradaException.class,
+                () -> tarjetaService.obtenerTarjeta(99L));
+
+        assertEquals("Tarjeta no encontrada", ex.getMessage());
+        assertEquals("TARJETA_NO_ENCONTRADA", ex.getCodigo());
     }
 }
