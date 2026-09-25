@@ -1,0 +1,17 @@
+$colores-rojo: (
+  1: #190501,
+  2: #4D0D05,
+  3: #83150B,
+  4: #B41813,
+  5: #E61919,
+  6: #EC534B,
+  7: #F48A80,
+  8: #FABCB2,
+  9: #FEEAE6,
+);
+
+:root {
+  @each $numero, $color in $colores-rojo {
+    --mlt-sys-color-rojo-#{$numero}: #{$color};
+  }
+}
