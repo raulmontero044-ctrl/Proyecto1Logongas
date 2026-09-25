@@ -1,6 +1,6 @@
 # Contexto del repositorio
 
-- No hay manifiesto ni tarea global: `backend/` y `frontend/` son aplicaciones independientes; ejecuta sus comandos desde la carpeta correspondiente.
+- No hay manifiesto de aplicación ni tarea global: `backend/` y `frontend/` son aplicaciones independientes; ejecuta sus comandos desde la carpeta correspondiente.
 - La implementación actual está concentrada en la feature `tarjeta`; no asumas que los módulos futuros descritos en `.kiro/steering/structure.md` ya existen.
 - `.kiro/steering/` contiene las decisiones de proyecto y `.kiro/specs/<feature>/` contiene requisitos, diseño, tareas y estado de cada feature. Consulta `/kiro-spec-status <feature>` antes de implementar y respeta sus aprobaciones.
 - Escribe la documentación de cada spec en el idioma de `spec.json.language`; las respuestas de este repositorio son en español.
@@ -27,12 +27,13 @@ Desde `frontend/`:
 
 ```powershell
 npm ci
-npm start                         # servidor en http://localhost:4200/
+npm start
 npm run build
 npm test -- --watch=false
 npm test -- --watch=false --include src/app/tarjeta/services/tarjeta.service.spec.ts
 ```
 
+- `npm start` sirve el frontend en `http://localhost:4200/`.
 - No hay scripts `lint` ni `typecheck`; `npm run build` es la verificación de compilación/typeScript de Angular.
 - Las pruebas frontend usan Vitest con jsdom y están junto al código como `*.spec.ts`; `ng e2e` no está configurado aunque aparezca en el README generado.
 - La suite backend necesita MySQL disponible: las pruebas JPA desactivan el reemplazo de base de datos y las pruebas de aplicación/integración arrancan Spring contra la configuración real.
