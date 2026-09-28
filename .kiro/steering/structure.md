@@ -43,7 +43,7 @@ El backend se organiza por funcionalidades:
 Cada funcionalidad contiene únicamente las capas que necesita:
 
 <feature>/
-├── controller/
+├── handler/
 ├── service/
 ├── repository/
 ├── entity/
@@ -55,8 +55,8 @@ No es obligatorio que todos los features tengan todas las carpetas. Si una funci
 **Location**: `/backend/src/main/java/.../<feature>/`
 **Purpose**: Contiene todos los elementos relacionados con una funcionalidad concreta del banco.
 **Example**: /cuenta/
-├── controller/
-│   └── CuentaController.java
+├── handler/
+│   └── CuentaHandler.java
 ├── service/
 │   └── CuentaService.java
 ├── repository/
@@ -70,35 +70,35 @@ No es obligatorio que todos los features tengan todas las carpetas. Si una funci
 Las funcionalidades principales pueden seguir esta estructura:
 
 /cliente/
-├── controller/
+├── handler/
 ├── service/
 ├── repository/
 ├── entity/
 └── dto/
 
 /cuenta/
-├── controller/
+├── handler/
 ├── service/
 ├── repository/
 ├── entity/
 └── dto/
 
 /tarjeta/
-├── controller/
+├── handler/
 ├── service/
 ├── repository/
 ├── entity/
 └── dto/
 
 /movimiento/
-├── controller/
+├── handler/
 ├── service/
 ├── repository/
 ├── entity/
 └── dto/
 
 /transferencia/
-├── controller/
+├── handler/
 ├── service/
 ├── repository/
 ├── entity/
@@ -106,9 +106,11 @@ Las funcionalidades principales pueden seguir esta estructura:
 
 ### Controllers
 
-**Location**: `/backend/src/main/java/.../<feature>/controller/`  
-**Purpose**: Contiene los controladores REST responsables de recibir las peticiones del frontend y devolver las respuestas correspondientes. No deben contener lógica de negocio compleja.  
-**Example**: Controladores relacionados con cuentas bancarias, tarjetas de débito y operaciones bancarias.
+**Location**: `/backend/src/main/java/.../common/dispatcher/` (Front Controller) y `/backend/src/main/java/.../<feature>/handler/` (handlers)  
+**Purpose**: La API aplica el patrón Front Controller. Un único `FrontController` mapeado en `/api/**` recibe todas las peticiones, localiza el `Handler` que declara soportar esa ruta y método, y delega la ejecución. Cada handler declara su ruta (con variables `{id}`) y su método, y solo traduce variables de ruta, deserializa y valida el cuerpo antes de llamar al servicio. Si ninguna handler soporta la ruta se responde `RUTA_NO_ENCONTRADA` y si la ruta existe con otro método se responde `METODO_NO_PERMITIDO`.  
+**Example**: `FrontController`, `CrearTarjetaHandler`, `ObtenerTarjetaHandler`, `ListarTiposTarjetaHandler`.
+
+Los handlers no deben contener lógica de negocio: solo adaptación de entrada/salida y validación a nivel de petición. No deben crearse controladores `@RestController` por funcionalidad; las nuevas rutas se registran como handlers.
 
 ### Services
 
@@ -229,10 +231,11 @@ En Angular/TypeScript se deben priorizar los imports mediante los alias de ruta 
 
 ## Code Organization Principles
 
-- Los controladores REST deben encargarse únicamente de recibir peticiones, validar los datos necesarios a nivel de entrada y delegar las operaciones a los servicios.
+- El Front Controller es el único punto de entrada de la API: recibe las peticiones, selecciona el handler y delega. No debe contener lógica de negocio.
+- Los handlers deben encargarse únicamente de traducir la petición (variables de ruta y cuerpo), validar los datos a nivel de entrada y delegar las operaciones a los servicios.
 - La lógica de negocio debe permanecer en la capa de servicios.
 - El acceso a la base de datos debe realizarse mediante repositorios y JPA.
-- Los controladores no deben acceder directamente a los repositorios.
+- Los handlers no deben acceder directamente a los repositorios.
 - Las entidades representan los datos persistidos y no deben utilizarse como sustituto de los DTOs cuando sea necesario controlar los datos expuestos por la API.
 - Las operaciones bancarias deben realizarse mediante la capa de servicios para mantener centralizadas las reglas de negocio.
 - El frontend Angular debe comunicarse con el backend mediante la API REST.

@@ -15,7 +15,7 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItems;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class TarjetaControllerIT {
+class TarjetaApiIT {
 
     @LocalServerPort
     private int port;
