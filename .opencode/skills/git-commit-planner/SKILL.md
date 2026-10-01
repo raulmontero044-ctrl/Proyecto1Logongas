@@ -19,19 +19,61 @@ Durante el análisis del repositorio, esta skill NO modifica nada. Prohibido:
 
 Comandos permitidos en esta fase: `git status`, `git diff`, `git log`, `git show`, `git ls-files`, `git rev-parse`, `git cat-file`, `git blame`, `git check-ignore`, `git stash list` (todos solo lectura).
 
-La única excepción es la fase 8 (Commit), que se ejecuta **solo** tras confirmación explícita del usuario.
+La única excepción son las fases 8 (Commit) y 10 (Push), que se ejecutan **solo** tras confirmación explícita del usuario.
 
 ## Fase de commit (tras confirmación)
 
 Solo si el usuario responde afirmativamente en la pregunta final:
 
 - Permitidos: `git add <rutas explícitas>`, `git commit -m`, `git status`, `git diff --cached`, `git log -1`.
-- Prohibido siempre: `git push`, `git commit --amend`, `git reset`, `git rebase`, `git merge`, `--force`, modificar el contenido de los archivos, `git add -A` o `git add .` sin rutas explícitas.
+- Prohibido siempre: `git commit --amend`, `git reset`, `git rebase`, `git merge`, `--force`, modificar el contenido de los archivos, `git add -A` o `git add .` sin rutas explícitas.
 - Añadir solo las rutas exactas de cada commit del plan aprobado. Nada más entra en el commit.
 - Respetar el orden `#` del plan. Si un commit falla, detenerse y reportar; no continuar con los siguientes.
 - Verificar antes de cada commit que el diff staged corresponde a lo planificado con `git diff --cached --stat`.
 
-Si el usuario dice `[n]` o "cancelar", no se ejecuta nada: el plan queda como resultado y no se vuelve a preguntar.
+Si el usuario dice `[n]` o "cancelar", no se ejecuta nada en el repositorio: el plan queda como resultado y se pasa igualmente a la fase 9 (informe de estado y decisión de push).
+
+## Fase de push (tras confirmación)
+
+Solo si el usuario responde afirmativamente en la pregunta de push:
+
+- Permitido: `git push` (y `git status -sb`, `git log --oneline origin/<rama>..HEAD` para verificar).
+- Prohibido: `--force`, `--force-with-lease`, cambiar de rama, `git push --delete`, `git merge`.
+
+Si el usuario dice `[n]`, no hacer push y terminar.
+
+## Fase de push fallido (tras confirmación)
+
+Si `git push` es rechazado, no intentar reintentar a ciegas. Clasificar primero el motivo real en la salida de error:
+
+| Motivo del rechazo                                  | ¿Rebase?                                   |
+| --------------------------------------------------- | ------------------------------------------ |
+| `non-fast-forward`, `fetch first`, `rejected`        | Sí: el remoto tiene commits que tú no      |
+| `Updates were rejected because the remote contains work that you do not have locally` | Sí, mismo caso               |
+| `Permission denied` / `403` / rama protegida        | No: es política del remoto, un rebase no lo arregla |
+| `Authentication failed` / `could not read Username`  | No: faltan credenciales                    |
+| `remote ref does not exist` / `no upstream`         | No: hay que configurar el upstream, no rebasear |
+| Red o timeout                                        | No: reintentar el mismo `git push` una vez |
+
+Solo en el caso de `non-fast-forward`:
+
+1. Preguntar con `question` (`multiple: false`) si quiere resolverlo con rebase.
+2. Si confirma, ejecutar `git pull --rebase` y después `git push` de nuevo.
+3. Si el rebase para con conflictos, detenerse: **no** resolverlos automáticamente, no usar `git rebase --abort` por cuenta propia y no hacer push. Informar de los archivos en conflicto con `git status` y preguntar al usuario cómo quiere continuar.
+
+Límites del rebase en esta skill:
+
+- Nunca `git push --force` como "solución" a un rechazo.
+- Nunca `git rebase` sobre commits que ya estén publicados en otra rama remota compartida sin decirlo antes.
+- El rebase reescribe los hashes de los commits locales: mencionarlo en la pregunta para que el usuario sea consciente.
+
+## Selección interactiva
+
+Todas las decisiones de esta skill se toman con la herramienta `question` (interfaz de botones), no escribiendo números en texto libre:
+
+- Preguntas de sí/no: `multiple: false` con dos opciones, `[Y]` recomendada primero y `[n]` después.
+- Selección de commits: `multiple: true`, una opción por commit con el número del plan en la etiqueta, y una primera opción "Todos los commits" para seleccionarlos de una vez.
+- Título de cada pregunta: máx. 30 caracteres. Texto de la pregunta: el mensaje literal que se indica en cada paso.
 
 ## Inputs
 
@@ -114,9 +156,9 @@ Marcar explícitamente, con motivo, todo archivo cuya pertenencia no pueda justi
 
 Ordenar los commits por dependencia: infraestructura/configuración → capas inferiores → capas superiores → tests → docs. Solo cuando un commit posterior realmente rompa o quede incompleto sin uno previo. Si un commit es autónomo, no forzar el orden por capas.
 
-### 7. Preguntar antes de actuar
+### 7. Preguntar si quiere commitear
 
-Una vez entregado el plan completo, mostrar al usuario exactamente este bloque y pedir confirmación:
+Una vez entregado el plan completo, preguntar con `question` (`multiple: false`). Mostrar además este bloque en el texto de la respuesta:
 
 ```text
 ¿Desea Commitear los cambios?
@@ -131,16 +173,23 @@ Una vez entregado el plan completo, mostrar al usuario exactamente este bloque y
 [n]-Cancelar
 ```
 
-Reglas de la pregunta:
+Opciones de la pregunta:
 
-- El mensaje literal es `¿Desea Commitear los cambios?`.
-- Si el usuario responde `y` (o "sí", "dale", "commitea"): preguntar **qué** commits quiere crear, listando uno por línea y numerados según el orden `#` del plan. Aceptar varios números separados por coma, un rango (`1-3`), `all`/`todos` para todos, o un subconjunto arbitrario.
-- Si el usuario responde `n` (o "no", "cancelar"): no ejecutar nada, no preguntar más y terminar ahí.
-- Si el plan tiene 0 commits (árbol limpio o cambios no commiteables), no preguntar: informarlo y terminar.
+- `[Y] Commitear` (Recomendado) — pasar al paso 8.
+- `[n] Cancelar` — no tocar el repositorio y pasar al paso 9.
 
-### 8. Crear los commits (solo los confirmados)
+Si el plan tiene 0 commits (árbol limpio o cambios no commiteables), no preguntar nada: informar y pasar directamente al paso 9.
 
-Crear únicamente los commits que el usuario haya seleccionado, respetando el orden `#` del plan aunque los elija en otro orden. Si el usuario selecciona un commit pero omite otro del que depende, avisar y crear el dependiente primero o no crearlo.
+### 8. Seleccionar y crear los commits
+
+**8.1 Selección interactiva.** Preguntar con `question` (`multiple: true`) para que el usuario pulse los commits que quiera:
+
+- Texto de la pregunta: `¿Qué cambios desea commitear?`
+- Opción 1: `Todos` — selecciona todos los commits del plan.
+- Una opción por commit, con el número y el mensaje: `1 — feat(book): add book search`, `2 — fix(auth): handle expired token`, etc.
+- Si el usuario no pulsa ninguno, se interpreta como cancelar: no crear nada y pasar al paso 9.
+
+**8.2 Creación.** Crear únicamente los commits seleccionados, respetando el orden `#` del plan aunque los pulse en otro orden. Si selecciona un commit pero omite otro del que depende, avisar antes de empezar.
 
 Para cada commit seleccionado, en orden:
 
@@ -150,9 +199,75 @@ git diff --cached --stat          # verificar que coincide con lo planificado
 git commit -m "<mensaje del plan>"
 ```
 
-Después de todos, mostrar `git log --oneline -<n>` y `git status` para confirmar el resultado, e informar de que nada se ha pusheado.
+Si un commit falla, detenerse, reportar el error y no continuar con los siguientes.
 
-Si el usuario pide ajustar algún mensaje o alcance antes de confirmar, modificar el plan y volver a preguntar.
+### 9. Informar del estado y recomendar push
+
+Ejecutar siempre, tanto si se han creado commits como si se han cancelado:
+
+```bash
+git status
+git status -sb                  # rama y respecto a origin
+git log --oneline -10
+git log --oneline origin/<rama>..HEAD   # commits pendientes de push
+```
+
+Redactar un informe con:
+
+1. **Commits creados**: hash corto y mensaje de cada uno, o `ninguno` si se canceló.
+2. **Estado del árbol**: limpio o con qué archivos quedan sin commitear.
+3. **Estado de la rama**: nombre, respecto a `origin` (`ahead N`, `behind N`, `diverged`, `up to date`).
+4. **Commits pendientes de push**: lista, o `ninguno`.
+5. **Cambios fuera de los commits**: archivos en "Cambios dudosos", no seleccionados o no commiteables.
+6. **Recomendación de push**: sí o no, con el motivo concreto.
+
+Criterios para recomendar `push`:
+
+- **Recomendar sí** si: el árbol está limpio, todos los commits son commiteables, no hay commits dudosos pendientes y no hay Tests/build sin verificar en los commits creados.
+- **Recomendar no** si: el árbol sigue sucio, queda algún commit sin crear, hay cambios dudosos, o el build está roto.
+- Si la rama está `behind`, advertir que hace falta `git pull` antes de pushear, y no hacerlo automáticamente.
+
+Después del informe, preguntar con `question` (`multiple: false`), mostrando este bloque:
+
+```text
+¿Desea hacer push de los cambios?
+
+[Y]-Hacer push de la rama actual.
+
+[n]-No hacer push, dejar los commits en local.
+```
+
+Opciones:
+
+- `[Y] Hacer push` (Recomendado) — ejecutar `git push` y verificar con `git status -sb`.
+- `[n] No hacer push` — terminar indicando que los commits quedan en local.
+
+Si la rama no tiene upstream o no hay commits pendientes de push, no preguntar y explicarlo en el informe.
+
+### 10. Push y, si falla, resolución por rebase
+
+Ejecutar `git push` y comprobar el resultado.
+
+**10.1 Push correcto.** Verificar con `git status -sb` que la rama queda sincronizada y mostrar los hashes subidos. Terminar.
+
+**10.2 Push rechazado.** Leer el mensaje de error completo y clasificarlo con la tabla de "Fase de push fallido". No reintentar sin saber la causa.
+
+- Si el motivo **no** es `non-fast-forward` (permisos, autenticación, upstream inexistente, red): informar de la causa concreta y de lo que el usuario debe hacer. No ejecutar rebase ni tocar el historial.
+- Si el motivo es `non-fast-forward`: informar de que el remoto tiene commits nuevos y preguntar con `question` (`multiple: false`):
+
+```text
+El push fue rechazado: la rama remota tiene commits que no están en local.
+Un rebase de tus commits locales sobre origin los reescribirá y cambiará sus hashes.
+
+¿Desea resolverlo con rebase?
+
+[Y]-Hacer git pull --rebase y volver a intentar el push.
+
+[n]-Cancelar, dejar los commits en local.
+```
+
+  - `[Y] Rebase` — ejecutar `git pull --rebase`; si termina limpio, reintentar `git push` una vez y verificar con `git status -sb`. Si el rebase para con conflictos, detenerse e informar con `git status` de los archivos en conflicto, sin resolverlos, sin `git rebase --abort` y sin push; preguntar al usuario cómo continuar.
+  - `[n] Cancelar` — terminar indicando que los commits quedan en local y que el remoto está adelantado.
 
 ## Output Format
 
@@ -254,15 +369,26 @@ Conventional Commits. Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`,
 - No inventar relaciones para que el plan quede "completo".
 - No preguntar por la ejecución si el plan tiene 0 commits.
 - No crear commits sin confirmación explícita del usuario, aunque el plan sea válido.
-- No crear commits que el usuario no haya seleccionado por número.
+- No crear commits que el usuario no haya seleccionado en la pregunta interactiva.
 - No incluir en un commit archivos que no estaban en la fila correspondiente del plan.
-- No hacer `git push`, `git commit --amend` ni reescribir historia.
+- No saltar el informe de estado (paso 9), se haya commitado o cancelado.
+- No hacer push sin confirmación explícita, ni con `--force`.
+- No reintentar un `git push` rechazado sin leer antes el motivo del error.
+- No hacer rebase si el rechazo no es `non-fast-forward` (permisos, auth, upstream, red).
+- No resolver conflictos de rebase automáticamente, ni hacer push con el rebase a medias.
+- No usar `git push --force` como solución a un rechazo.
+- No hacer `git pull --rebase` sobre commits ya publicados en otra rama compartida sin avisar antes.
+- No hacer `git rebase --abort` por cuenta propia.
+- No hacer `git merge` ni reescribir historia para "dejarlo limpio".
 
 ## Cierre
 
-Cerrar según la respuesta del usuario:
+El desenlace depende de las fases 9 y 10:
 
-- **`[n]` / cancelar**: indicar explícitamente que no se ha modificado nada ni se ha creado ningún commit, y que los comandos `git add` exactos quedan en sus manos. No insistir ni volver a preguntar.
-- **`[y]`**: crear solo los commits seleccionados en el paso 8, listar los creados con su hash corto y mensaje, confirmar con `git log` y `git status` que el árbol queda como esperaba, y recordar que nada se ha pusheado.
+- Si en 9 el usuario elige `[n]` o no hay commits pendientes de push: indicar que los commits quedan en local, que nada se ha pusheado y listar qué commits están pendientes frente a `origin`.
+- Si en 10.1 el push fue exitoso: mostrar que el push se realizó y que la rama está sincronizada con `origin` (hashes subidos).
+- Si en 10.2 el push fue rechazado por otra causa distinta a `non-fast-forward`: explicar la causa y qué debe hacer el usuario. Nada se reescribe.
+- Si en 10.2 el push fue rechazado por `non-fast-forward` y el usuario eligió `[n]`: indicar que los commits quedan en local y que `origin` está adelantado. Nada se reescribe.
+- Si en 10.2 el push fue rechazado por `non-fast-forward` y se hizo rebase + push: indicar el resultado final y que los hashes locales fueron reescritos por el rebase.
 
-En ambos casos, indicar si algún cambio del repositorio quedó fuera de los commits (por ejemplo, archivos en "Cambios dudosos", commits no seleccionados o no commiteables).
+El informe del paso 9 ya cubre los commits creados, el estado del árbol, la relación con `origin` y los cambios que quedaron fuera. En el cierre solo se confirma el desenlace.
