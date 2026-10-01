@@ -127,22 +127,53 @@ Motivo:
 
 ### Plan de commits
 
+Primero un **índice por tipo**, donde cada tipo es una fila y solo aparecen los que tengan commits:
+
 ```text
-Commit 1
-Tipo: feat
-Scope: book
-Mensaje:
-feat(book): add book search functionality
+| Tipo | Nº | Scope | Mensaje |
+|------|----|-------|---------|
+| feat | 1 | book | feat(book): add book search functionality |
+| fix | 2 | auth | fix(auth): handle expired token on refresh |
+| test | 3 | book | test(book): add search controller tests |
+| refactor | 4 | user | refactor(user): simplify user service mapping |
+| docs | 5 | — | docs: update installation instructions |
+```
 
+Después la **tabla detallada**, una fila por commit, en orden de ejecución:
+
+```text
+| # | Tipo | Scope | Mensaje | Archivos | Depende de |
+|---|------|-------|---------|----------|------------|
+| 1 | feat | book | feat(book): add book search functionality | BookController.java, BookService.java, BookRepository.java | — |
+| 2 | fix | auth | fix(auth): handle expired token on refresh | AuthService.java, AuthServiceTest.java | — |
+| 3 | test | book | test(book): add search controller tests | BookControllerTest.java | 1 |
+| 4 | refactor | user | refactor(user): simplify user service mapping | UserService.java | — |
+| 5 | docs | — | docs: update installation instructions | README.md | — |
+```
+
+Reglas de la tabla:
+
+- `#` es el orden de ejecución, respetando dependencias.
+- `Scope` es `—` cuando el tipo no aporta contexto (típico en `docs`, `chore`, `ci`, `build`).
+- `Archivos` lista todas las rutas del commit, separadas por comas.
+- `Depende de` es `—` si el commit es autónomo, o `N` si necesita antes al commit N.
+- Un tipo sin commits se indica con `(sin commits de este tipo)` bajo la tabla, para que quede explícito que no se olvidó.
+- Los archivos que ya están staged se marcan con `(staged)` tras su nombre.
+
+### Detalle por commit
+
+Tras la tabla, una ficha corta por commit solo si hace falta justificarlo:
+
+```text
+Commit 1 — feat(book)
+Mensaje: feat(book): add book search functionality
 Archivos:
-- src/.../BookController.java
-- src/.../BookService.java
-- src/.../BookRepository.java
-- src/.../BookControllerTest.java
-
-Motivo:
-<unidad funcional, dependencias mantenidas juntas>
-Depende de: <commit N | ninguno>
+- src/main/java/.../BookController.java
+- src/main/java/.../BookService.java
+- src/main/java/.../BookRepository.java
+- src/test/java/.../BookControllerTest.java
+Motivo: única unidad funcional; controller, service, repository y su test se mantienen
+juntos para que el commit sea completo y revisable por sí solo.
 ```
 
 ### Cambios dudosos
