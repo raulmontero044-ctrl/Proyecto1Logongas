@@ -1,6 +1,5 @@
 package com.mibanco.tarjeta.handler;
 
-import com.mibanco.common.dispatcher.DeserializadorCuerpo;
 import com.mibanco.common.dispatcher.Handler;
 import com.mibanco.common.dispatcher.RespuestaHandler;
 import com.mibanco.common.dispatcher.Rutas;
