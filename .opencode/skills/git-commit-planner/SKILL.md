@@ -1,15 +1,15 @@
 ---
 name: git-commit-planner
-description: Analyze uncommitted Git changes (staged, unstaged, untracked, deleted, renamed) and propose a plan of atomic, coherent Conventional Commits grouped by logical functionality. Use when asked to plan commits, split changes into commits, organize pending work for commit, or review dirty state before committing. Read-only - never commits.
+description: Analyze uncommitted Git changes (staged, unstaged, untracked, deleted, renamed) and propose a plan of atomic, coherent Conventional Commits grouped by logical functionality, then ask before executing them. Use when asked to plan commits, split changes into commits, organize pending work for commit, or review dirty state before committing.
 ---
 
 # git-commit-planner
 
-Analiza el estado actual de Git y produce un **plan de commits** atómicos y coherentes.
+Analiza el estado actual de Git y produce un **plan de commits** atómicos y coherentes. Al final pregunta al usuario si quiere ejecutar esos commits.
 
-## Límite absoluto (solo lectura)
+## Límite absoluto (solo lectura durante el análisis)
 
-Esta skill NO modifica el repositorio. Prohibido:
+Durante el análisis del repositorio, esta skill NO modifica nada. Prohibido:
 
 - `git add`, `git commit`, `git commit -a`, `git stash`, `git restore`, `git checkout --`
 - `git reset` (incluido `--soft`, `--mixed`, `--hard`)
@@ -17,9 +17,21 @@ Esta skill NO modifica el repositorio. Prohibido:
 - Editar, crear, renombrar o borrar cualquier archivo
 - `git pull`, `git push`, `git merge`, `git rebase`, `git cherry-pick`, `git am`
 
-Comandos permitidos: `git status`, `git diff`, `git log`, `git show`, `git ls-files`, `git rev-parse`, `git cat-file`, `git blame`, `git check-ignore`, `git stash list` (todos solo lectura). Cualquier otro comando de escritura se omite y se reporta en "Cambios dudosos".
+Comandos permitidos en esta fase: `git status`, `git diff`, `git log`, `git show`, `git ls-files`, `git rev-parse`, `git cat-file`, `git blame`, `git check-ignore`, `git stash list` (todos solo lectura).
 
-El único resultado es el plan. El usuario decide si lo ejecuta.
+La única excepción es la fase 8 (Commit), que se ejecuta **solo** tras confirmación explícita del usuario.
+
+## Fase de commit (tras confirmación)
+
+Solo si el usuario responde afirmativamente en la pregunta final:
+
+- Permitidos: `git add <rutas explícitas>`, `git commit -m`, `git status`, `git diff --cached`, `git log -1`.
+- Prohibido siempre: `git push`, `git commit --amend`, `git reset`, `git rebase`, `git merge`, `--force`, modificar el contenido de los archivos, `git add -A` o `git add .` sin rutas explícitas.
+- Añadir solo las rutas exactas de cada commit del plan aprobado. Nada más entra en el commit.
+- Respetar el orden `#` del plan. Si un commit falla, detenerse y reportar; no continuar con los siguientes.
+- Verificar antes de cada commit que el diff staged corresponde a lo planificado con `git diff --cached --stat`.
+
+Si el usuario dice `[n]` o "cancelar", no se ejecuta nada: el plan queda como resultado y no se vuelve a preguntar.
 
 ## Inputs
 
@@ -101,6 +113,46 @@ Marcar explícitamente, con motivo, todo archivo cuya pertenencia no pueda justi
 ### 6. Orden
 
 Ordenar los commits por dependencia: infraestructura/configuración → capas inferiores → capas superiores → tests → docs. Solo cuando un commit posterior realmente rompa o quede incompleto sin uno previo. Si un commit es autónomo, no forzar el orden por capas.
+
+### 7. Preguntar antes de actuar
+
+Una vez entregado el plan completo, mostrar al usuario exactamente este bloque y pedir confirmación:
+
+```text
+¿Desea Commitear los cambios?
+
+[y]-Commitea los cambios.
+
+¿Qué cambios desea commitear?
+1-Commit-1
+2-Commit-2
+...
+
+[n]-Cancelar
+```
+
+Reglas de la pregunta:
+
+- El mensaje literal es `¿Desea Commitear los cambios?`.
+- Si el usuario responde `y` (o "sí", "dale", "commitea"): preguntar **qué** commits quiere crear, listando uno por línea y numerados según el orden `#` del plan. Aceptar varios números separados por coma, un rango (`1-3`), `all`/`todos` para todos, o un subconjunto arbitrario.
+- Si el usuario responde `n` (o "no", "cancelar"): no ejecutar nada, no preguntar más y terminar ahí.
+- Si el plan tiene 0 commits (árbol limpio o cambios no commiteables), no preguntar: informarlo y terminar.
+
+### 8. Crear los commits (solo los confirmados)
+
+Crear únicamente los commits que el usuario haya seleccionado, respetando el orden `#` del plan aunque los elija en otro orden. Si el usuario selecciona un commit pero omite otro del que depende, avisar y crear el dependiente primero o no crearlo.
+
+Para cada commit seleccionado, en orden:
+
+```bash
+git add <rutas exactas del commit>
+git diff --cached --stat          # verificar que coincide con lo planificado
+git commit -m "<mensaje del plan>"
+```
+
+Después de todos, mostrar `git log --oneline -<n>` y `git status` para confirmar el resultado, e informar de que nada se ha pusheado.
+
+Si el usuario pide ajustar algún mensaje o alcance antes de confirmar, modificar el plan y volver a preguntar.
 
 ## Output Format
 
@@ -200,7 +252,17 @@ Conventional Commits. Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`,
 - No separar código y sus tests salvo justificación explícita.
 - No dejar commits que rompan el build o dejen la funcionalidad incompleta.
 - No inventar relaciones para que el plan quede "completo".
+- No preguntar por la ejecución si el plan tiene 0 commits.
+- No crear commits sin confirmación explícita del usuario, aunque el plan sea válido.
+- No crear commits que el usuario no haya seleccionado por número.
+- No incluir en un commit archivos que no estaban en la fila correspondiente del plan.
+- No hacer `git push`, `git commit --amend` ni reescribir historia.
 
 ## Cierre
 
-Tras el plan, indicar de forma explícita: **no se ha modificado nada ni se ha creado ningún commit**; los comandos `git add` exactos quedan en manos del usuario.
+Cerrar según la respuesta del usuario:
+
+- **`[n]` / cancelar**: indicar explícitamente que no se ha modificado nada ni se ha creado ningún commit, y que los comandos `git add` exactos quedan en sus manos. No insistir ni volver a preguntar.
+- **`[y]`**: crear solo los commits seleccionados en el paso 8, listar los creados con su hash corto y mensaje, confirmar con `git log` y `git status` que el árbol queda como esperaba, y recordar que nada se ha pusheado.
+
+En ambos casos, indicar si algún cambio del repositorio quedó fuera de los commits (por ejemplo, archivos en "Cambios dudosos", commits no seleccionados o no commiteables).
